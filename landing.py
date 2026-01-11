@@ -101,3 +101,10 @@ with col5:
 # ================== FOOTER ==================
 st.divider()
 st.caption("MedCopilot OS © Medical Intelligence Platform | Clinical • Research • Regulatory")
+
+st.divider()
+if st.button("🚪 Logout"):
+    st.session_state.logged_in = False
+    st.session_state.username = ""
+    st.session_state.role = ""
+    st.switch_page("login.py")

@@ -1,5 +1,12 @@
 import streamlit as st
 
+# --------- Auth Guard ----------
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
+    st.warning("Please login to continue")
+    st.switch_page("login.py")
+
+import streamlit as st
+
 # ================== PAGE CONFIG ==================
 st.set_page_config(
     page_title="MedCopilot OS — Medical Intelligence Platform",

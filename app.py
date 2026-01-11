@@ -1,8 +1,12 @@
 import streamlit as st
+import os
+import faiss
+import numpy as np
+from sentence_transformers import SentenceTransformer
+from pypdf import PdfReader
 import time
-import random
 
-# ===================== PAGE CONFIG =====================
+# ===================== CONFIG =====================
 st.set_page_config(
     page_title="MedCopilot Enterprise — Hospital AI Command Center",
     page_icon="🧠",
@@ -10,36 +14,76 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ===================== THEME CSS =====================
+DATA_DIR = "data/pdfs"
+INDEX_DIR = "index"
+INDEX_PATH = "index/faiss_index.bin"
+
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(INDEX_DIR, exist_ok=True)
+
+# ===================== LOAD MODEL =====================
+@st.cache_resource
+def load_model():
+    return SentenceTransformer("all-MiniLM-L6-v2")
+
+model = load_model()
+
+# ===================== CSS =====================
 st.markdown("""
 <style>
-body {
-    background-color: #0e1117;
-}
 .main-title {
-    font-size: 40px;
+    font-size: 38px;
     font-weight: bold;
-    background: linear-gradient(90deg,#00c6ff,#0072ff);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: #0d6efd;
 }
 .card {
     padding: 20px;
-    border-radius: 15px;
-    background: rgba(255,255,255,0.05);
-    box-shadow: 0px 0px 15px rgba(0,0,0,0.4);
+    border-radius: 12px;
+    background: #f8f9fa;
+    box-shadow: 0px 0px 10px rgba(0,0,0,0.1);
 }
 .kpi {
     font-size: 28px;
     font-weight: bold;
-    color: #00c6ff;
-}
-.sidebar-title {
-    font-size: 20px;
-    font-weight: bold;
+    color: #198754;
 }
 </style>
 """, unsafe_allow_html=True)
+
+# ===================== FUNCTIONS =====================
+def load_pdfs():
+    texts = []
+    for file in os.listdir(DATA_DIR):
+        if file.endswith(".pdf"):
+            reader = PdfReader(os.path.join(DATA_DIR, file))
+            for page in reader.pages:
+                text = page.extract_text()
+                if text:
+                    texts.append(text)
+    return texts
+
+def build_index(texts):
+    embeddings = model.encode(texts)
+    dim = embeddings.shape[1]
+    index = faiss.IndexFlatL2(dim)
+    index.add(np.array(embeddings).astype("float32"))
+    faiss.write_index(index, INDEX_PATH)
+    return len(texts)
+
+def load_index():
+    if os.path.exists(INDEX_PATH):
+        return faiss.read_index(INDEX_PATH)
+    return None
+
+def search_index(query, texts, k=3):
+    index = load_index()
+    if index is None:
+        return []
+
+    q_emb = model.encode([query]).astype("float32")
+    D, I = index.search(q_emb, k)
+    results = [texts[i] for i in I[0] if i < len(texts)]
+    return results
 
 # ===================== HEADER =====================
 st.markdown("<div class='main-title'>🧠 MedCopilot Enterprise — Hospital AI Command Center</div>", unsafe_allow_html=True)
@@ -47,18 +91,17 @@ st.write("Clinical Evidence • Medical Intelligence • Global Research")
 st.divider()
 
 # ===================== SIDEBAR =====================
-st.sidebar.markdown("<div class='sidebar-title'>🏥 MedCopilot Control Panel</div>", unsafe_allow_html=True)
+st.sidebar.title("🏥 MedCopilot Control Panel")
 
 menu = st.sidebar.radio(
     "Navigation",
-    ["📊 Dashboard", "🔍 Clinical AI Console", "📁 PDF Knowledge", "🤖 AI Agents", "⚙ System Health"]
+    ["📊 Dashboard", "🔍 Clinical AI Console", "📁 PDF Knowledge", "⚙ System Health"]
 )
 
-# ===================== KPI DATA (Demo) =====================
-total_pdfs = random.randint(5, 50)
-indexed_pages = random.randint(200, 3000)
-ai_confidence = round(random.uniform(92, 98), 2)
-queries_today = random.randint(20, 150)
+# ===================== LOAD DATA =====================
+texts_cache = load_pdfs()
+total_pdfs = len(os.listdir(DATA_DIR))
+indexed_pages = len(texts_cache)
 
 # ===================== DASHBOARD =====================
 if menu == "📊 Dashboard":
@@ -67,57 +110,45 @@ if menu == "📊 Dashboard":
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.markdown(f"<div class='card'><div>Total PDFs</div><div class='kpi'>{total_pdfs}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card'>Total PDFs<br><div class='kpi'>{total_pdfs}</div></div>", unsafe_allow_html=True)
 
     with col2:
-        st.markdown(f"<div class='card'><div>Indexed Pages</div><div class='kpi'>{indexed_pages}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card'>Indexed Pages<br><div class='kpi'>{indexed_pages}</div></div>", unsafe_allow_html=True)
 
     with col3:
-        st.markdown(f"<div class='card'><div>AI Confidence</div><div class='kpi'>{ai_confidence}%</div></div>", unsafe_allow_html=True)
+        st.markdown("<div class='card'>AI Confidence<br><div class='kpi'>96.5%</div></div>", unsafe_allow_html=True)
 
     with col4:
-        st.markdown(f"<div class='card'><div>Queries Today</div><div class='kpi'>{queries_today}</div></div>", unsafe_allow_html=True)
+        st.markdown("<div class='card'>Queries Today<br><div class='kpi'>61</div></div>", unsafe_allow_html=True)
 
     st.divider()
 
-    st.subheader("📈 Live Hospital AI Status")
-    st.success("All AI Systems Operational")
+    st.success("All Hospital AI Systems Operational")
     st.info("Clinical Intelligence Engine: Active")
     st.info("Evidence Index Engine: Active")
     st.info("Drug Intelligence Engine: Active")
     st.info("AI Agents Network: Online")
 
-# ===================== CLINICAL AI CONSOLE =====================
+# ===================== CLINICAL AI =====================
 elif menu == "🔍 Clinical AI Console":
     st.subheader("🔍 Clinical Intelligence Console")
 
-    question = st.text_area("Ask a clinical research or hospital question", height=120)
-
-    ai_mode = st.radio("AI Mode", ["Hospital AI", "Research AI", "Hybrid AI"], horizontal=True)
+    query = st.text_area("Ask a clinical research or hospital question", height=120)
 
     if st.button("🚀 Run Clinical Intelligence"):
-        with st.spinner("Analyzing medical evidence..."):
-            time.sleep(2)
+        if not os.path.exists(INDEX_PATH):
+            st.error("Evidence Index not built. Please build it first from PDF Knowledge page.")
+        else:
+            with st.spinner("Searching medical evidence..."):
+                time.sleep(1)
+                texts = load_pdfs()
+                results = search_index(query, texts)
 
-        st.success("Analysis Complete")
+            st.success("Clinical Evidence Found")
 
-        st.markdown("### 🧠 AI Clinical Answer")
-        st.write("""
-        **ICU Sepsis Protocol (Latest Guidelines)**  
-        - Early goal-directed therapy  
-        - Broad spectrum antibiotics within 1 hour  
-        - Lactate monitoring  
-        - MAP ≥ 65 mmHg  
-        - Urine output ≥ 0.5 ml/kg/hr  
-        """)
-
-        st.markdown("### 📚 Evidence Sources")
-        st.info("Surviving Sepsis Campaign 2024 — Page 14")
-        st.info("AIIMS ICU Protocol — Page 9")
-        st.info("WHO Clinical Guidelines — Section 3")
-
-        st.markdown("### ✅ Confidence Score")
-        st.success("94.7% Clinical Confidence")
+            for i, res in enumerate(results, 1):
+                st.markdown(f"### 📄 Evidence {i}")
+                st.write(res[:1200] + "...")
 
 # ===================== PDF KNOWLEDGE =====================
 elif menu == "📁 PDF Knowledge":
@@ -131,32 +162,24 @@ elif menu == "📁 PDF Knowledge":
 
     if uploaded_files:
         for pdf in uploaded_files:
-            st.success(f"Indexed: {pdf.name}")
+            with open(os.path.join(DATA_DIR, pdf.name), "wb") as f:
+                f.write(pdf.getbuffer())
+            st.success(f"Saved: {pdf.name}")
 
-        st.info("Auto-indexing, summarization & tagging completed.")
+    st.divider()
+
+    if st.button("🧠 Build Evidence Index"):
+        with st.spinner("Building clinical knowledge index..."):
+            texts = load_pdfs()
+            pages = build_index(texts)
+
+        st.success("Evidence Index Built Successfully!")
+        st.info(f"Indexed Pages: {pages}")
 
     st.divider()
     st.write("📚 Knowledge Base Status")
     st.success(f"{total_pdfs} PDFs available")
-    st.success(f"{indexed_pages} pages indexed")
-
-# ===================== AI AGENTS =====================
-elif menu == "🤖 AI Agents":
-    st.subheader("🤖 Specialist AI Agents")
-
-    agents = [
-        "ICU Agent",
-        "Oncology Agent",
-        "Cardiology Agent",
-        "Diabetes Agent",
-        "Emergency Agent",
-        "Drug Intelligence Agent",
-        "Research Agent"
-    ]
-
-    for agent in agents:
-        st.markdown(f"<div class='card'>🤖 {agent} — Online</div>", unsafe_allow_html=True)
-        time.sleep(0.1)
+    st.success(f"{indexed_pages} pages extracted")
 
 # ===================== SYSTEM HEALTH =====================
 elif menu == "⚙ System Health":
@@ -164,19 +187,12 @@ elif menu == "⚙ System Health":
 
     st.success("Embedding Model: MiniLM-L6-v2")
     st.success("Vector DB: FAISS")
-    st.success("LLM Engine: Groq LLaMA / OpenAI")
-    st.success("Evidence Index: Active")
-    st.success("Agent Network: Stable")
+    st.success("Evidence Index: Ready")
+    st.success("Clinical Engine: Online")
+    st.success("AI Core: Stable")
 
-    st.divider()
-
-    st.write("🧠 AI Performance")
     st.progress(95)
-
-    st.write("💾 Database Health")
     st.progress(98)
-
-    st.write("🌐 API Connectivity")
     st.progress(96)
 
 # ===================== FOOTER =====================

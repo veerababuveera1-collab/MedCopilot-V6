@@ -1,4 +1,10 @@
 import streamlit as st
+
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
+    st.warning("Please login to access Hospital AI")
+    st.switch_page("login.py")
+
+import streamlit as st
 import os
 import pickle
 import numpy as np
@@ -326,3 +332,4 @@ for q in st.session_state.query_history[-5:]:
 # ================== FOOTER ==================
 st.divider()
 st.caption("MedCopilot Enterprise © Hospital AI Platform | Clinical Decision Intelligence")
+

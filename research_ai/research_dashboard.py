@@ -1,4 +1,10 @@
 import streamlit as st
+
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
+    st.warning("Please login to access Research AI")
+    st.switch_page("../login.py")
+
+import streamlit as st
 import faiss
 import pickle
 import numpy as np
@@ -46,3 +52,4 @@ if st.button("🚀 Run Research Intelligence") and query:
     for i in I[0]:
         st.markdown(documents[i][:1200])
         st.info(sources[i])
+
